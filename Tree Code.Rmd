@@ -1,0 +1,15 @@
+---
+title: "Tree Code"
+author: "Niclas Frederic Sturm"
+date: "22 10 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This document contains the code for the seminar "Statistical Learning and Econometrics", with a focus on tree-based models. 
+
