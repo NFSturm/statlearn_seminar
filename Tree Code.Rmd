@@ -13,3 +13,26 @@ knitr::opts_chunk$set(echo = TRUE)
 
 This document contains the code for the seminar "Statistical Learning and Econometrics", with a focus on tree-based models. 
 
+```{r}
+library(rpart)
+library(rpart.plot)
+library(rsample) # Loading required packages
+library(MASS)
+
+set.seed(1997) # Set seed for reproducibility
+```
+
+For the regression trees, the Boston housing dataset will be used. 
+
+```{r}
+Boston_splits <- initial_split(Boston)
+train <- training(Boston_splits)
+test <- testing(Boston_splits)
+```
+
+Now, we will fit a regression tree.
+
+```{r}
+tree.boston <- rpart(medv~., data = train)
+```
+
