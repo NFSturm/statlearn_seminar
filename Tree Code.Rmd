@@ -55,7 +55,7 @@ train <- training(crime_splits)
 test <- testing(crime_splits)
 ```
 
-Now, we will fit a regression tree.
+Now, we will fit a regression tree using recursive partitioning. 
 
 ```{r message=FALSE}
 tree_crime <- rpart(ViolentCrimesPerPop~., method = "anova", data = train)
