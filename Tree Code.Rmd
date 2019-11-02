@@ -2,7 +2,9 @@
 title: "Tree-based methods"
 author: "Niclas Frederic Sturm"
 date: "22-10-2019"
-output: html_document
+output:
+  html_document:
+    theme: yeti
 ---
 
 ```{r setup, include=FALSE}
@@ -11,17 +13,44 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Introduction
 
-This document contains the code for the seminar "Statistical Learning and Econometrics", with a focus on tree-based models. 
+This document contains the code for the seminar "Statistical Learning and Econometrics", with a focus on tree-based models. We will first import the UCI Communities and Crime Dataset.
 
 ```{r}
 library(rpart)
 library(rpart.plot)
 library(rsample) # Loading required packages
-library(MASS)
 library(partykit)
+library(dplyr)
+library(readr)
+library(naniar)
+
+set.seed(1997) # Set seed for reproducibility
+setwd("/Users/nfsturm/Documents/STATLEARN\forestranger")
+
+crime_data <- read_csv("crimedata.csv", col_names = TRUE)
+drop_cols <- c("communityname", "state", "countyCode", "communityCode", "fold", "murdPerPop", "rapesPerPop", "robbbPerPop", "assaultPerPop", "burglPerPop", "larcPerPop", "autoTheftPerPop", "arsonsPerPop", "nonViolPerPop", "murders", "rapes", "robberies", "assaults", "burglaries", "larcenies", "autoTheft", "arsons")
+crime_data <- crime_data %>%
+  select(-drop_cols) %>%
+  replace_with_na_all(condition = ~.x == "?")
+
+drop_vars <- miss_var_summary(crime_data)
+drop_vars <- drop_vars %>%
+  filter(pct_miss > 10) %>%
+  select(variable) %>%
+  pull()
+
+crime_data <- crime_data %>%
+  select(-drop_vars)
+
 
 set.seed(1997) # Set seed for reproducibility
 ```
+
+
+```{r}
+
+```
+
 
 For the regression trees, the Boston housing dataset will be used. 
 
@@ -33,7 +62,7 @@ test <- testing(Boston_splits)
 
 Now, we will fit a regression tree.
 
-```{r}
+```{r message=FALSE}
 tree_boston <- rpart(medv~., data = train)
 tree_plot_prep <- as.party(tree_boston)
 summary(tree_boston)
