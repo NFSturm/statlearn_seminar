@@ -13,9 +13,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Introduction
 
-This document contains the code for the seminar "Statistical Learning and Econometrics", with a focus on tree-based models. We will first import the UCI Communities and Crime Dataset.
+This document contains the code for the seminar "Statistical Learning and Econometrics", with a focus on tree-based models. Four models will be used for modeling: A simple decision tree, a bagged model, boosting as well as a random forest. To accomplish a good benchmarking estimated, we will use two datasets; one for regression, the other for classification. We will first import the UCI Communities and Crime Dataset as the regression dataset and an Employee Churn dataset provided by IBM. 
 
-```{r message = FALSE}
+```{r warning = FALSE, message = FALSE}
 library(rpart) # Loading required packages
 library(rpart.plot)
 library(rsample)
@@ -25,8 +25,11 @@ library(naniar)
 library(Metrics)
 library(ipred)
 library(purrr)
+library(ranger)
+library(gbm)
 
 set.seed(1997) # Set seed for reproducibility
+setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
 
 crime_data <- read_csv("crimedata.csv", col_names = TRUE)
 drop_cols <- c("communityname", "state", "countyCode", "communityCode", "fold", "murdPerPop", "rapesPerPop", "robbbPerPop", "assaultPerPop", "burglPerPop", "larcPerPop", "autoTheftPerPop", "arsonsPerPop", "nonViolPerPop", "murders", "rapes", "robberies", "assaults", "burglaries", "larcenies", "autoTheft", "arsons")
@@ -45,9 +48,10 @@ crime_data <- crime_data %>%
 
 crime_data <- drop_na(crime_data)
 crime_data <- map_at(crime_data, .at = 1:103, .f = as.numeric)
+crime_data <- as_tibble(crime_data)
 ```
 
-The model for regression trees will use the dataset to predict ViolentCrimes per 100,000 units of population. 
+We will randomly split the data into a training and testing dataset. 
 
 ```{r}
 crime_splits <- initial_split(crime_data)
@@ -55,10 +59,46 @@ train <- training(crime_splits)
 test <- testing(crime_splits)
 ```
 
-Now, we will fit a regression tree using recursive partitioning. 
+Now, we will fit a regression tree using recursive partitioning. The response variable is "ViolentCrimesPerPop", i.e. the number of violent crimes per 100,000 inhabitants. 
 
 ```{r message=FALSE}
 tree_crime <- rpart(ViolentCrimesPerPop~., method = "anova", data = train)
 rpart.plot(tree_crime, branch = 0.04)
+```
+
+The regression tree results in a tree that predicts nine distinct values. Following this simple regression tree, we will estimate a model using bootstrap aggregation. 
+
+```{r}
+bag_model <- bagging(ViolentCrimesPerPop~., nbagg = 500, coob = TRUE)
+```
+
+Next, a gradient boosting machine will be used. We will the popular "gbm" package to build a model. 
+
+```{r}
+boost_model <- gbm(ViolentCrimesPerPop~., distribution = "gaussian", data = train, n.trees = 2000, shrinkage = 0.1, cv.folds = 10)
+best <- which.min(boost_model$cv.error)
+sqrt(boost_model$cv.error[best])
+```
+
+Finally, we will grow a random forest using the "ranger" package, a fast implementation. Afterwards, the cross-validated error (v = 10) is calculated.
+
+```{r}
+
+ranger_model <- ranger(ViolentCrimesPerPop~., data = train)
+cv_split <- vfold_cv(train, v = 10)
+cv_data <- cv_split %>%
+  mutate(train = map(splits, ~training(.x)),
+         validation = map(splits, ~testing(.x)))
+cv_models_ranger <- cv_data %>%
+  mutate(ranger_model = map(train, ~ranger(formula = 
+    ViolentCrimesPerPop~., data = .x)))
+cv_prep_ranger <- cv_models_ranger %>%
+  mutate(validation_actual = map(validation, ~.x$ViolentCrimesPerPop)) %>%
+  mutate(validation_predicted = map2(ranger_model, validation, ~predict(.x, .y)$predictions)) 
+cv_eval_ranger <- cv_prep_ranger %>%
+  mutate(validation_rmse = map2_dbl(validation_actual, validation_predicted, ~rmse(actual = .x, predicted =.y)))
+
+mean(cv_eval_ranger$validate_rmse)
+
 ```
 
