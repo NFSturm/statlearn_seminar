@@ -1,0 +1,33 @@
+---
+title: "Classification_Trees"
+author: "Niclas Frederic Sturm"
+date: "3 11 2019"
+output:
+  pdf_document: default
+  html_document:
+    theme: yeti
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This document provides documentation for classification trees. It will show applications using the "Employee Attrition" dataset provided by IBM. 
+
+```{r}
+library(readr)
+set.seed(1997) # Set seed for reproducibility
+setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
+
+churn_data <- read_csv("employee_attrition.csv", col_names = TRUE)
+```
+
+The response variable is located in the "attrition" column.
+
