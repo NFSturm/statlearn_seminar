@@ -1,5 +1,5 @@
 # Statlearn Seminar
-This implements code of the "Statistical Learning and Econometrics" seminar at Ruprecht-Karls-Universitaet. Datasets used are  "UCI Crime and Communities" and "Employee Attrition". Both were drawn from Kaggle and can be accessed here:
+This implements code of the "Statistical Learning and Econometrics" seminar at Ruprecht-Karls-Universitaet. In the first step, we will be concerned with regression trees, their creation and evaluation. The second step consists in using classification trees. Models at our disposal include simple decision trees, bagged and boosted models as well as random forests. The datasets used are  "UCI Crime and Communities" and "Employee Attrition". Both were drawn from Kaggle and can be accessed here:
 
 UCI Crime and Communities:
 https://www.kaggle.com/kkanda/communities%20and%20crime%20unnormalized%20data%20set
