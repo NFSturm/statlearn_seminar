@@ -1,11 +1,16 @@
 ---
-title: "Tree-based methods"
+title: "Regression Trees"
 author: "Niclas Frederic Sturm"
 date: "22-10-2019"
 output:
   html_document:
     theme: yeti
 ---
+
+<style>
+body {
+text-align: justify}
+</style>
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -28,6 +33,10 @@ library(purrr)
 library(ranger)
 library(gbm)
 library(ggplot2)
+library(doParallel)
+library(foreach)
+library(tidyr)
+library(stringr)
 
 set.seed(1997) # Set seed for reproducibility
 setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
@@ -60,17 +69,72 @@ train <- training(crime_splits)
 test <- testing(crime_splits)
 ```
 
-Now, we will fit a regression tree using recursive partitioning. The response variable is "ViolentCrimesPerPop", i.e. the number of violent crimes per 100,000 inhabitants. 
+Now, we will fit a regression tree using recursive partitioning. The response variable is "ViolentCrimesPerPop", i.e. the number of violent crimes per 100,000 inhabitants. All predictors are used. 
 
 ```{r message=FALSE}
-tree_crime <- rpart(ViolentCrimesPerPop~., method = "anova", data = train)
+tree_crime <- rpart(ViolentCrimesPerPop~., method = "anova", data = train, control = rpart.control(cp = 0.01, xval = 10))
 rpart.plot(tree_crime, branch = 0.04)
 ```
 
-The regression tree results in a tree that predicts nine distinct values. Following this simple regression tree, we will estimate a model using bootstrap aggregation. 
+The regression tree results in a tree that predicts nine distinct values. Although the tree is not very complex, we could investigate how the complexity parameter $\lambda$ influences the relative error of the model. 
 
 ```{r}
-bag_model <- bagging(ViolentCrimesPerPop~., data = train, nbagg = 500, coob = TRUE)
+plotcp(tree_crime)
+```
+
+Inspecting the graphic, it becomes apparent that the x-val relative error (crossvalidated $1-R^2$) is minimized at a value of around 0.060. 
+
+Following this simple regression tree, we will estimate a model using bootstrap aggregation. 
+
+```{r}
+nr_cores <- detectCores() - 2
+cl <- makeCluster(nr_cores) # Use the number of cores available minus 2
+registerDoParallel(cl) # Activate parallel backend
+
+# Fit trees in parallel and compute predictions on the test set
+predictions <- foreach(
+  icount(160), 
+  .packages = "rpart", 
+  .combine = cbind
+   ) %dopar% {
+    # bootstrap copy of training data
+    index <- sample(nrow(train), replace = TRUE)
+    train_boot <- train[index, ]  
+  
+    # fit tree to bootstrap copy
+    bagged_tree <- rpart(
+      ViolentCrimesPerPop ~ ., 
+      control = rpart.control(minsplit = 2, cp = 0.05),
+      data = train_boot
+      ) 
+    
+    predict(bagged_tree, newdata = test)
+   }
+# stopCluster(cl)
+
+predictions <- as_tibble(predictions)
+
+predictions_df <- predictions %>%
+  mutate(instance = 1:n(), actual = test$ViolentCrimesPerPop)
+  
+predictions_df2 <- gather(predictions_df, nr_tree, predicted, -c(instance, actual)) %>%
+  mutate(nr_tree = str_extract(nr_tree, '\\d+'))
+
+predictions_df2$nr_tree <- as.numeric(predictions_df2$nr_tree)
+
+tree_prep <- predictions_df2 %>%
+  arrange(instance, nr_tree) %>%
+  group_by(instance) %>%
+  mutate(avg_prediction = cummean(predicted)) %>%
+  group_by(nr_tree) %>%
+  summarize(RMSE = rmse(actual, avg_prediction))
+  
+```
+
+We will plot the bagged model.
+
+```{r}
+ggplot(tree_prep, aes(nr_tree, RMSE)) + geom_line(col = "#7fa9c1") + theme_classic() + labs(title = "Bootstrap Aggregating RMSE", subtitle = "Implemented with ipred") + xlab("Number of Trees") + ylab("Test RMSE")
 ```
 
 Next, a gradient boosting machine will be used. We will the popular "gbm" package to build a model. 
@@ -87,7 +151,7 @@ The best tree grown by boosting achieves a cross-validated RMSE of 383. We concl
 
 cv_split <- vfold_cv(train, v = 10)
 
-cv_data <- cv_split %>% # Calculating the cross-validated error for the model. 
+cv_data <- cv_split %>%
   mutate(train = map(splits, ~training(.x)),
          validation = map(splits, ~testing(.x)))
 
@@ -109,10 +173,18 @@ cv_select <- cv_tune %>%
 cv_select
 ```
 
+The results show that the minimum RMSE is achieved for a number of five variables that are considered at each split (mtry = 5). This is the model, for which we will calculate the RMSE on the test data.
+
+```{r}
+ranger_model <- cv_tune$model[[5]]
+actual <- test$ViolentCrimesPerPop
+predicted <- predict(ranger_model, test)
+predicted <- predicted$predictions
+rmse(actual, predicted)
+```
+
 We will now plot mtry against the cross-validated RMSE metric.
 
 ```{r}
 ggplot(cv_select, aes(x = mtry, y = mean.rmse)) + geom_line(col = "#7fa9c1") + geom_point(col = "#7fa9c1") + theme_classic() + labs(title = "Random Forest RMSE", subtitle = "Implemented with Ranger") + xlab("Mtry") + ylab("Cross-validated RMSE") + scale_x_continuous(breaks = seq(1, 15, 2))
 ```
-
-The results show that the minimum RMSE is achieved for a number of five variables that are considered at each split (mtry = 5). 
