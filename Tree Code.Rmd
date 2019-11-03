@@ -27,6 +27,7 @@ library(ipred)
 library(purrr)
 library(ranger)
 library(gbm)
+library(ggplot2)
 
 set.seed(1997) # Set seed for reproducibility
 setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
@@ -69,7 +70,7 @@ rpart.plot(tree_crime, branch = 0.04)
 The regression tree results in a tree that predicts nine distinct values. Following this simple regression tree, we will estimate a model using bootstrap aggregation. 
 
 ```{r}
-bag_model <- bagging(ViolentCrimesPerPop~., nbagg = 500, coob = TRUE)
+bag_model <- bagging(ViolentCrimesPerPop~., data = train, nbagg = 500, coob = TRUE)
 ```
 
 Next, a gradient boosting machine will be used. We will the popular "gbm" package to build a model. 
@@ -80,25 +81,38 @@ best <- which.min(boost_model$cv.error)
 sqrt(boost_model$cv.error[best])
 ```
 
-Finally, we will grow a random forest using the "ranger" package, a fast implementation. Afterwards, the cross-validated error (v = 10) is calculated.
+The best tree grown by boosting achieves a cross-validated RMSE of 383. We conclude the analysis of regression trees with a random forest. To this end we will be using the "ranger" package, a fast implementation. Again, ten-fold cross-validated will be used to evaluate the model. 
 
 ```{r}
 
-ranger_model <- ranger(ViolentCrimesPerPop~., data = train)
 cv_split <- vfold_cv(train, v = 10)
-cv_data <- cv_split %>%
+
+cv_data <- cv_split %>% # Calculating the cross-validated error for the model. 
   mutate(train = map(splits, ~training(.x)),
          validation = map(splits, ~testing(.x)))
-cv_models_ranger <- cv_data %>%
-  mutate(ranger_model = map(train, ~ranger(formula = 
-    ViolentCrimesPerPop~., data = .x)))
-cv_prep_ranger <- cv_models_ranger %>%
+
+cv_tune <- cv_data %>%
+  crossing(mtry = 1:15) %>%
+  mutate(model = map2(train, mtry, .f = ~ranger(formula = ViolentCrimesPerPop~.,
+  data = .x, mtry = .y)))
+
+cv_tune <- cv_tune %>%
   mutate(validation_actual = map(validation, ~.x$ViolentCrimesPerPop)) %>%
-  mutate(validation_predicted = map2(ranger_model, validation, ~predict(.x, .y)$predictions)) 
-cv_eval_ranger <- cv_prep_ranger %>%
+  mutate(validation_predicted = map2(model, validation, ~predict(.x, .y)$predictions)) %>%
   mutate(validation_rmse = map2_dbl(validation_actual, validation_predicted, ~rmse(actual = .x, predicted =.y)))
 
-mean(cv_eval_ranger$validate_rmse)
+cv_select <- cv_tune %>%
+  select(mtry, model, validation_rmse) %>%
+  group_by(mtry) %>%
+  summarize(mean.rmse = mean(validation_rmse))
 
+cv_select
 ```
 
+We will now plot mtry against the cross-validated RMSE metric.
+
+```{r}
+ggplot(cv_select, aes(x = mtry, y = mean.rmse)) + geom_line(col = "#7fa9c1") + geom_point(col = "#7fa9c1") + theme_classic() + labs(title = "Random Forest RMSE", subtitle = "Implemented with Ranger") + xlab("Mtry") + ylab("Cross-validated RMSE") + scale_x_continuous(breaks = seq(1, 15, 2))
+```
+
+The results show that the minimum RMSE is achieved for a number of five variables that are considered at each split (mtry = 5). 
