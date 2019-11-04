@@ -23,11 +23,51 @@ This document provides documentation for classification trees. It will show appl
 
 ```{r}
 library(readr)
+library(dplyr)
+library(rpart)
+library(rpart.plot)
+library(rsample)
+library(Metrics)
+library(ipred)
 set.seed(1997) # Set seed for reproducibility
 setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
 
 churn_data <- read_csv("employee_attrition.csv", col_names = TRUE)
+drop_vars <- c("EmployeeCount", "EmployeeNumber")
+churn_data <- churn_data %>%
+  select(-drop_vars)
+
+churn_data <- churn_data %>%
+  mutate(Attrition = ifelse(Attrition == 'Yes', 1, 0))
+
 ```
 
-The response variable is located in the "attrition" column.
+
+```{r}
+churn_splits <- initial_split(churn_data)
+test <- testing(churn_splits)
+train <- training(churn_splits)
+```
+
+## Decision Trees
+
+The response variable is located in the "attrition" column. We will first fit a basic classification tree.
+
+```{r}
+tree_churn <- rpart(Attrition ~., data = train, method = "class")
+```
+
+We will plot the decision tree. 
+
+```{r}
+rpart.plot(tree_churn, branch = 0.03, tweak = 1.7)
+```
+
+In this case, the complexity parameter $\lambda$ does not have a significant influence on the prediction outcome. 
+
+## Bagging 
+
+## Boosting
+
+## Random Forest
 
