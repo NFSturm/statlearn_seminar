@@ -32,6 +32,7 @@ library(ipred)
 library(doParallel)
 library(foreach)
 library(stringr)
+library(purrr)
 
 set.seed(1997) # Set seed for reproducibility
 setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
@@ -70,10 +71,28 @@ rpart.plot(tree_churn, branch = 0.5, tweak = 1.5)
 ## Bagging 
 
 ```{r}
-bagg_model <- bagging(Attrition~., data = train, nbagg = 100)
-bagg_prob <- predict(bagg_model, test)
-actual <- test$Attrition
-bagg_predictions <- ifelse(bagg_prob > 0.5, 1, 0)
+nbagg = c(5, 10, 15, 20, 25, 50, 100, 200, 300)
+
+eval_df <- train %>%
+  crossing(nbagg = c(5, 10, 15, 20, 25, 50, 100, 200, 300)) %>%
+  group_by(nbagg) %>%
+  nest(.key = "train") %>%
+  mutate(model = map2(train, nbagg, .f = ~bagging(formula = Attrition~., data = .x, nbagg = .y)))
+
+test_nested <- nest(test)
+test_nested <- test_nested %>%
+  crossing(1:length(nbagg)) %>%
+  select(data)
+
+colnames(test_nested) <- "test"
+
+bound_df <- bind_cols(eval_df, test_nested)
+bound_df <- bound_df %>%
+  mutate(test_actual = map(test, ~.x$Attrition)) %>%
+  mutate(test_predicted = map2(model, test, ~predict(.x, .y))) %>%
+  mutate(test_predicted = map(test_predicted, ~round(.x, digits = 0))) %>%
+  mutate(test_accuracy = map2_dbl(test_actual, test_predicted, ~accuracy(actual = .x, predicted = .y)))
+
 
 ```
 
