@@ -3,9 +3,9 @@ title: "Regression Trees"
 author: "Niclas Frederic Sturm"
 date: "22-10-2019"
 output:
-  pdf_document: default
   html_document:
     theme: yeti
+  pdf_document: default
 ---
 
 <style>
@@ -19,10 +19,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Introduction
 
-This document contains the code for the seminar "Statistical Learning and Econometrics", with a focus on tree-based models. Four models will be used for modeling: A simple decision tree, a bagged model, boosting as well as a random forest. To accomplish a good benchmarking estimated, we will use two datasets; one for regression, the other for classification. We will first import the UCI Communities and Crime Dataset as the regression dataset.
+Dieses Dokument enthält die Programmierbefehle zur Erstellung von Modellen auf Basis von Entscheidungsbäumen. Die Grundlage für die hier verwendeten Modelle sind einfache Entscheidungsbäume. Darauf aufbauend werden die »Ensemble-Lerner« erstellt. Zu diesen zählen solche Modelle, die mithilfe von »Bootstrap Aggregation« *parallel* trainiert wurden bzw. mithilfe von »Boosting« eine *tiefe* Struktur aufweisen. Die Anwendungsbeispiele in diesem Dokument beschränken sich auf Regressionsbäume, d.h. solche Bäume, deren Zielvariable stetig ist. Hierzu wurde der »UCI Crime and Communities«-Datensatz verwendet.
 
 ```{r warning = FALSE, message = FALSE}
-library(rpart) # Loading required packages
+library(rpart) # Import der notwendigen Installationen
 library(rpart.plot)
 library(rsample)
 library(dplyr)
@@ -40,7 +40,7 @@ library(tidyr)
 library(stringr)
 library(caret)
 
-set.seed(1997) # Set seed for reproducibility
+set.seed(1997) # Zur Gewährleistung von Replizierbarkeit wird im Hintergrund ein Zufallswert gesetzt
 setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
 
 crime_data <- read_csv("crimedata.csv", col_names = TRUE)
@@ -63,7 +63,7 @@ crime_data <- map_at(crime_data, .at = 1:103, .f = as.numeric)
 crime_data <- as_tibble(crime_data)
 ```
 
-We will randomly split the data into a training and testing dataset. 
+Die Modellierungsstrategie folgt einem *Split-Train-Test*-Paradigma. 
 
 ```{r}
 crime_splits <- initial_split(crime_data)
@@ -71,7 +71,7 @@ train <- training(crime_splits)
 test <- testing(crime_splits)
 ```
 
-Now, we will fit a regression tree using recursive partitioning. The response variable is "ViolentCrimesPerPop", i.e. the number of violent crimes per 100,000 inhabitants. All predictors are used. 
+Ein einfacher Regressionsbaum wird nun über »recursive partitioning« erstellt. Dieser Begriff bedeutet zunächst, dass ein Datensatz mit *p* erklärenden Variablen binär aufgeteilt wird, d.h. eine Variable wird herangezogen, um ein Trennungskriterium festzulegen. Im vorliegenden Beispiel ist die abhängige Variable »ViolentCrimesPerPop«, die eine Darstellung für die Zahl von Gewaltverbrechen pro 100,000 Einwohner ist. 
 
 ## Decision Trees
 
@@ -80,34 +80,32 @@ tree_crime <- rpart(ViolentCrimesPerPop~., method = "anova", data = train, contr
 rpart.plot(tree_crime, branch = 0.04, tweak = 1.2)
 ```
 
-The regression tree results in a tree that predicts nine distinct values. Although the tree is not very complex, we could investigate how the complexity parameter $\lambda$ influences the relative error of the model. 
+Der Regressionsbaum erzeugt neun unterschiedliche Vorhersagen. Wir können nun betrachten, wie die Wahl des Komplexitätsparameters $\alpha$ den relativen Fehler ($1-R^2$) beeinflusst. 
 
 ```{r}
 plotcp(tree_crime)
 ```
 
-Inspecting the graphic, it becomes apparent that the x-val relative error (crossvalidated $1-R^2$) is minimized at a value of around 0.01. 
-
 ## Bootstrap aggregating
 
-Following this simple regression tree, we will estimate a model using bootstrap aggregation. To visualize how the number of trees fit influences prediction accuracy, we will run a process that creates 160 trees and fits and one model per tree. This model will then predict values of the test set. 
+Die »Bootstrap«-Aggregation ist ein paralleler Prozess, der sich gut nachvollziehen lässt. Die Vorgehensweise besteht darin, zunächst aus dem Training-Datensatz *k*-mal *n* Werte mit Wiederholung zu ziehen und für jeden der *k* »neuen« Datensätze einen Entscheidungsbaum zu erstellen. 
 
 ```{r}
 nr_cores <- detectCores() - 2
-cl <- makeCluster(nr_cores) # Use the number of cores available minus 2
-registerDoParallel(cl) # Activate parallel backend
+cl <- makeCluster(nr_cores) # Verwendung der Kernzahl minus 2
+registerDoParallel(cl) # Aktivierung des Parallel-Computing-Backends
 
-# Fit trees in parallel and compute predictions on the test set
+# Parallele Erstellung der Entscheidungsbäume 
 predictions <- foreach(
-  icount(160), 
+  icount(200), 
   .packages = "rpart", 
   .combine = cbind
    ) %dopar% {
-    # Create bootstrapped copy of the training set
+    # Bootstrap-Kopie des originalen Training-Datensatzes
     index <- sample(nrow(train), replace = TRUE)
     train_boot <- train[index, ]  
   
-    # Grow tree on top of bootstrapped copy
+    # Erstellen des Entscheidungsbaums auf Basis der Bootstrap-Kopie
     bagged_tree <- rpart(
       ViolentCrimesPerPop ~ ., 
       control = rpart.control(minsplit = 2, cp = 0.05),
@@ -137,7 +135,7 @@ tree_prep <- predictions_df2 %>%
   
 ```
 
-We will plot the bagged model.
+Die Evaluation der Anzahl der verwendeten Bäume lässt sich gut grafisch veranschaulichen. 
 
 ```{r}
 ggplot(tree_prep, aes(nr_tree, RMSE)) + geom_line(col = "#7fa9c1", size = 2) + theme_classic() + theme(text = element_text(size=20)) + labs(title = "Bootstrap Aggregating RMSE", subtitle = "Implemented with ipred") + xlab("Number of Trees") + ylab("Test RMSE")
@@ -145,7 +143,7 @@ ggplot(tree_prep, aes(nr_tree, RMSE)) + geom_line(col = "#7fa9c1", size = 2) + t
 
 ## Boosting
 
-Next, a gradient boosting machine will be used. We will the popular "gbm" package to build a model. 
+Anders als der »Bagging«-Algorithmus versucht der »Boosting«-Algorithmus *sequentiell* aus schwachen Lernen stärkere zu erzeugen. Damit fokussiert er deutlich stärker als die Bagging-Methode auf falsch klassifizierten Beobachtungen bzw. solche Beobachtungen, die ein großes Residuum auf Basis des vorherigen Modells erzeugen. 
 
 ```{r}
 boost_model <- gbm(ViolentCrimesPerPop~., distribution = "gaussian", data = train, n.trees = 2000, shrinkage = 0.1, cv.folds = 10)
@@ -153,11 +151,11 @@ best <- which.min(boost_model$cv.error)
 sqrt(boost_model$cv.error[best])
 ```
 
-The best tree grown by boosting achieves a cross-validated RMSE of 383. 
+Das beste Modell erreicht einen RMSE-Wert von etwa 388. 
 
 ## Random Forests
 
-We conclude the analysis of regression trees with a random forest. To this end we will be using the "ranger" package, a fast implementation. Again, ten-fold cross-validated will be used to evaluate the model. 
+Zuletzt 
 
 ```{r}
 
@@ -186,7 +184,7 @@ cv_select <- cv_tune %>%
 cv_select
 ```
 
-The results show that the minimum RMSE is achieved for a number of five variables that are considered at each split (mtry = 5). This is the model, for which we will calculate the RMSE on the test data.
+Für mtry = 5 erreicht der Random Forest den geringsten Kreuzvalidierungsfehler. 
 
 ```{r}
 ranger_model <- ranger(ViolentCrimesPerPop~., data = train, mtry = 5)
@@ -196,7 +194,7 @@ predicted <- predicted$predictions
 rmse(actual, predicted)
 ```
 
-We will now plot mtry against the cross-validated RMSE metric.
+Der RMSE als Funktion von mtry lässt sich gut veranschaulichen. 
 
 ```{r}
 ggplot(cv_select, aes(x = mtry, y = mean.rmse)) + geom_line(col = "#7fa9c1", size = 2) + geom_point(col = "#7fa9c1", size = 3) + theme_classic() + theme(text = element_text(size=20)) + labs(title = "Random Forest RMSE", subtitle = "Implemented with Ranger") + xlab("Mtry") + ylab("Cross-validated RMSE") + scale_x_continuous(breaks = seq(1, 15, 2))

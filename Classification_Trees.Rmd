@@ -1,5 +1,5 @@
 ---
-title: "Classification_Trees"
+title: "Classification Trees"
 author: "Niclas Frederic Sturm"
 date: "3-11-2019"
 output:
@@ -19,9 +19,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Introduction
 
-This document provides documentation for classification trees. It will show applications using the "Employee Attrition" dataset provided by IBM. 
+Dieses Dokument enthält die Programmierbefehle zur Erstellung von Modellen auf Basis von Entscheidungsbäumen. 
 
-```{r}
+```{r message = FALSE}
 library(readr)
 library(dplyr)
 library(rpart)
@@ -29,6 +29,10 @@ library(rpart.plot)
 library(rsample)
 library(Metrics)
 library(ipred)
+library(doParallel)
+library(foreach)
+library(stringr)
+
 set.seed(1997) # Set seed for reproducibility
 setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
 
@@ -39,9 +43,9 @@ churn_data <- churn_data %>%
 
 churn_data <- churn_data %>%
   mutate(Attrition = ifelse(Attrition == 'Yes', 1, 0))
-
 ```
 
+Auch für Klassifikationsaufgaben entspricht das *Split-Train-Test*-Paradigma gegenwärtigen Standards. 
 
 ```{r}
 churn_splits <- initial_split(churn_data)
@@ -51,21 +55,28 @@ train <- training(churn_splits)
 
 ## Decision Trees
 
-The response variable is located in the "attrition" column. We will first fit a basic classification tree.
+Die abhängige Variable - »Attrition« - wird nun zur Zielvariable eines einfachen Entscheidungsbaums. 
 
 ```{r}
 tree_churn <- rpart(Attrition ~., data = train, method = "class")
 ```
 
-We will plot the decision tree. 
+Eine graphische Darstellung des Entscheidungsbaums zeigt, dass der Baum 13 verschiedene Kriterien zur Teilung verwendet. 
 
 ```{r}
-rpart.plot(tree_churn, branch = 0.03, tweak = 1.7)
+rpart.plot(tree_churn, branch = 0.5, tweak = 1.5)
 ```
 
-In this case, the complexity parameter $\lambda$ does not have a significant influence on the prediction outcome. 
-
 ## Bagging 
+
+```{r}
+bagg_model <- bagging(Attrition~., data = train, nbagg = 100)
+bagg_prob <- predict(bagg_model, test)
+actual <- test$Attrition
+bagg_predictions <- ifelse(bagg_prob > 0.5, 1, 0)
+
+```
+
 
 ## Boosting
 
