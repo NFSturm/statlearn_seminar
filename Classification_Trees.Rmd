@@ -33,6 +33,7 @@ library(doParallel)
 library(foreach)
 library(stringr)
 library(purrr)
+library(tibble)
 
 set.seed(1997) # Set seed for reproducibility
 setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
@@ -71,30 +72,46 @@ rpart.plot(tree_churn, branch = 0.5, tweak = 1.5)
 ## Bagging 
 
 ```{r}
-nbagg = c(5, 10, 15, 20, 25, 50, 100, 200, 300)
+nbagg_list = c(seq(1, 500, 25))
 
 eval_df <- train %>%
-  crossing(nbagg = c(5, 10, 15, 20, 25, 50, 100, 200, 300)) %>%
+  crossing(nbagg = nbagg_list) %>%
   group_by(nbagg) %>%
   nest(.key = "train") %>%
   mutate(model = map2(train, nbagg, .f = ~bagging(formula = Attrition~., data = .x, nbagg = .y)))
 
 test_nested <- nest(test)
 test_nested <- test_nested %>%
-  crossing(1:length(nbagg)) %>%
+  crossing(1:length(nbagg_list)) %>%
   select(data)
 
 colnames(test_nested) <- "test"
+
+customRound <- function(x) {
+  rounded <- ifelse(x > 0.6, 1, 0)
+  return(rounded)
+} 
+"Um die Unsicherheit der Schätzung abzudecken, kann über diese Funktion
+ein Grenzwert gewählt werden, ab dem eine binäre Schätzung vorgenommen wird."
 
 bound_df <- bind_cols(eval_df, test_nested)
 bound_df <- bound_df %>%
   mutate(test_actual = map(test, ~.x$Attrition)) %>%
   mutate(test_predicted = map2(model, test, ~predict(.x, .y))) %>%
-  mutate(test_predicted = map(test_predicted, ~round(.x, digits = 0))) %>%
+  mutate(test_predicted = map(test_predicted, ~customRound(.x))) %>%
   mutate(test_accuracy = map2_dbl(test_actual, test_predicted, ~accuracy(actual = .x, predicted = .y)))
 
-
+nbagg_tbl <- enframe(nbagg_list, value = "nbagg", name = NULL)
+accuracies_tbl <- enframe(bound_df$test_accuracy, value = "accuracy", name = NULL)
+accuracies_df <- bind_cols(nbagg_tbl, accuracies_tbl)
 ```
+
+Die Entwicklung des Genauigkeits-Maßs kann grafisch dargestellt werden. 
+
+```{r}
+ggplot(accuracies_df, aes(nbagg, accuracy)) + geom_point() + geom_line() + theme_classic() + labs(title = "Genauigkeitsmaß nach Anzahl der Bootstrap-Replikationen", caption = "Verwendung 25 diskreter Werte") + xlab("Anzahl der aggregierten Bäume") + ylab("Genauigekeit") + scale_y_continuous(limits = c(0.8, 0.86))
+```
+
 
 
 ## Boosting

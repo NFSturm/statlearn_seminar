@@ -138,7 +138,7 @@ tree_prep <- predictions_df2 %>%
 Die Evaluation der Anzahl der verwendeten Bäume lässt sich gut grafisch veranschaulichen. 
 
 ```{r}
-ggplot(tree_prep, aes(nr_tree, RMSE)) + geom_line(col = "#7fa9c1", size = 2) + theme_classic() + theme(text = element_text(size=20)) + labs(title = "Bootstrap Aggregating RMSE", subtitle = "Implemented with ipred") + xlab("Number of Trees") + ylab("Test RMSE")
+ggplot(tree_prep, aes(nr_tree, RMSE)) + geom_line(col = "#7fa9c1", size = 2) + theme_classic() + theme(text = element_text(size=20)) + labs(title = "RMSE-Maß für Bootstrapping") + xlab("Anzahl der Bootstrap-Replikationen") + ylab("Test RMSE")
 ```
 
 ## Boosting
@@ -197,5 +197,5 @@ rmse(actual, predicted)
 Der RMSE als Funktion von mtry lässt sich gut veranschaulichen. 
 
 ```{r}
-ggplot(cv_select, aes(x = mtry, y = mean.rmse)) + geom_line(col = "#7fa9c1", size = 2) + geom_point(col = "#7fa9c1", size = 3) + theme_classic() + theme(text = element_text(size=20)) + labs(title = "Random Forest RMSE", subtitle = "Implemented with Ranger") + xlab("Mtry") + ylab("Cross-validated RMSE") + scale_x_continuous(breaks = seq(1, 15, 2))
+ggplot(cv_select, aes(x = mtry, y = mean.rmse)) + geom_line(col = "#7fa9c1", size = 2) + geom_point(col = "#7fa9c1", size = 3) + theme_classic() + theme(text = element_text(size=20)) + labs(title = "Random Forest RMSE") + xlab("Mtry") + ylab("Cross-validated RMSE") + scale_x_continuous(breaks = seq(1, 15, 2))
 ```
