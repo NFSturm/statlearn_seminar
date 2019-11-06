@@ -34,17 +34,23 @@ library(foreach)
 library(stringr)
 library(purrr)
 library(tibble)
+library(gbm)
 
 set.seed(1997) # Set seed for reproducibility
 setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
 
 churn_data <- read_csv("employee_attrition.csv", col_names = TRUE)
-drop_vars <- c("EmployeeCount", "EmployeeNumber")
+drop_vars <- c("EmployeeCount", "EmployeeNumber", "Over18", "StandardHours", "HourlyRate", "MonthlyRate", "DailyRate")
 churn_data <- churn_data %>%
   select(-drop_vars)
 
 churn_data <- churn_data %>%
   mutate(Attrition = ifelse(Attrition == 'Yes', 1, 0))
+
+factor_vars <- c("BusinessTravel", "Department", "EducationField", "Gender", "JobRole", "MaritalStatus", "OverTime")
+
+churn_data[factor_vars] <- lapply(churn_data[factor_vars], as.factor)
+
 ```
 
 Auch für Klassifikationsaufgaben entspricht das *Split-Train-Test*-Paradigma gegenwärtigen Standards. 
@@ -88,7 +94,7 @@ test_nested <- test_nested %>%
 colnames(test_nested) <- "test"
 
 customRound <- function(x) {
-  rounded <- ifelse(x > 0.6, 1, 0)
+  rounded <- ifelse(x > 0.5, 1, 0)
   return(rounded)
 } 
 "Um die Unsicherheit der Schätzung abzudecken, kann über diese Funktion
@@ -109,12 +115,21 @@ accuracies_df <- bind_cols(nbagg_tbl, accuracies_tbl)
 Die Entwicklung des Genauigkeits-Maßs kann grafisch dargestellt werden. 
 
 ```{r}
-ggplot(accuracies_df, aes(nbagg, accuracy)) + geom_point() + geom_line() + theme_classic() + labs(title = "Genauigkeitsmaß nach Anzahl der Bootstrap-Replikationen", caption = "Verwendung 25 diskreter Werte") + xlab("Anzahl der aggregierten Bäume") + ylab("Genauigekeit") + scale_y_continuous(limits = c(0.8, 0.86))
+ggplot(accuracies_df, aes(nbagg, accuracy)) + geom_point() + geom_line() + theme_classic() + 
+  labs(title = "Genauigkeitsmaß nach Anzahl der Bootstrap-Replikationen", caption = "Verwendung 20 diskreter Werte") + 
+  xlab("Anzahl der aggregierten Bäume") + ylab("Genauigkeit") + scale_y_continuous(limits = c(0.8, 0.86)) + scale_x_continuous(limits = c(0, 500))
 ```
 
-
-
 ## Boosting
+
+```{r}
+boost_model <- gbm(Attrition~., distribution = "gaussian", data = train, n.trees = 1000, shrinkage = 0.1, cv.folds = 10, n.minobsinnode = 10)
+predicted <- predict(boost_model, newdata = test, n.trees = 1000) 
+predicted <- ifelse(predicted > 0.5, 1, 0)
+actual <- test$Attrition
+
+```
+
 
 ## Random Forest
 

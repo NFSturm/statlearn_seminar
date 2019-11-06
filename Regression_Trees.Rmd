@@ -38,7 +38,7 @@ library(doParallel)
 library(foreach)
 library(tidyr)
 library(stringr)
-library(caret)
+library(vip)
 
 set.seed(1997) # Zur Gewährleistung von Replizierbarkeit wird im Hintergrund ein Zufallswert gesetzt
 setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
@@ -97,7 +97,7 @@ registerDoParallel(cl) # Aktivierung des Parallel-Computing-Backends
 
 # Parallele Erstellung der Entscheidungsbäume 
 predictions <- foreach(
-  icount(200), 
+  icount(500), 
   .packages = "rpart", 
   .combine = cbind
    ) %dopar% {
@@ -155,7 +155,7 @@ Das beste Modell erreicht einen RMSE-Wert von etwa 388.
 
 ## Random Forests
 
-Zuletzt 
+Zuletzt soll es um Random Forests gehen. Strukturell sind diese der »Bagging«-Methode sehr ähnlich. Der wesentliche Unterschied liegt darin, dass Random Forests einen Versuch darstellen, die einzelnen Entscheidungsbäume zu »dekorrelieren«. Dies weist auf ein Problem der Bagging Methode hin. Da bei jedem Split $m = p$ Variablen berücksichtigt werden, ist es möglich, dass die »stärkste« Variable wiederholt auftaucht und die Bäume trotz hoher Zahl sich ähneln. Bei Random Forests wird nur ein zufällig ausgewählte Untermenge der Menge an Variablen berücksichtigt. 
 
 ```{r}
 
@@ -187,7 +187,7 @@ cv_select
 Für mtry = 5 erreicht der Random Forest den geringsten Kreuzvalidierungsfehler. 
 
 ```{r}
-ranger_model <- ranger(ViolentCrimesPerPop~., data = train, mtry = 5)
+ranger_model <- ranger(ViolentCrimesPerPop~., data = train, mtry = 5, importance = "impurity")
 actual <- test$ViolentCrimesPerPop
 predicted <- predict(ranger_model, test)
 predicted <- predicted$predictions
@@ -197,5 +197,5 @@ rmse(actual, predicted)
 Der RMSE als Funktion von mtry lässt sich gut veranschaulichen. 
 
 ```{r}
-ggplot(cv_select, aes(x = mtry, y = mean.rmse)) + geom_line(col = "#7fa9c1", size = 2) + geom_point(col = "#7fa9c1", size = 3) + theme_classic() + theme(text = element_text(size=20)) + labs(title = "Random Forest RMSE") + xlab("Mtry") + ylab("Cross-validated RMSE") + scale_x_continuous(breaks = seq(1, 15, 2))
+ggplot(cv_select, aes(x = mtry, y = mean.rmse)) + geom_line(col = "#7fa9c1", size = 1) + geom_point(col = "#7fa9c1", size = 3) + theme_classic() + theme(text = element_text(size=20)) + labs(title = "Random Forest RMSE") + xlab("Mtry") + ylab("Cross-validated RMSE") + scale_x_continuous(breaks = seq(1, 15, 2))
 ```
