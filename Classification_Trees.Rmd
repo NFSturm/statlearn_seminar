@@ -29,12 +29,12 @@ library(rpart.plot)
 library(rsample)
 library(Metrics)
 library(ipred)
-library(doParallel)
-library(foreach)
 library(stringr)
 library(purrr)
 library(tibble)
 library(gbm)
+library(caret)
+library(ranger)
 
 set.seed(1997) # Set seed for reproducibility
 setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
@@ -59,6 +59,7 @@ Auch für Klassifikationsaufgaben entspricht das *Split-Train-Test*-Paradigma ge
 churn_splits <- initial_split(churn_data)
 test <- testing(churn_splits)
 train <- training(churn_splits)
+actual <- test$Attrition
 ```
 
 ## Decision Trees
@@ -74,6 +75,20 @@ Eine graphische Darstellung des Entscheidungsbaums zeigt, dass der Baum 13 versc
 ```{r}
 rpart.plot(tree_churn, branch = 0.5, tweak = 1.5)
 ```
+
+```{r}
+predictions <- predict(tree_churn, test)
+predictions <- ifelse(predictions > 0.5, 1, 0)
+Metrics::accuracy(actual, predictions)
+```
+
+Der einzelne Baum erreicht eine Vorhersagegenauigkeit von 50%. 
+
+```{r}
+tree_pruned <- prune.rpart(tree_churn, cp = 0.024)
+```
+
+
 
 ## Bagging 
 
@@ -93,8 +108,8 @@ test_nested <- test_nested %>%
 
 colnames(test_nested) <- "test"
 
-customRound <- function(x) {
-  rounded <- ifelse(x > 0.5, 1, 0)
+customRound <- function(x, threshold = 0.5) {
+  rounded <- ifelse(x > threshold, 1, 0)
   return(rounded)
 } 
 "Um die Unsicherheit der Schätzung abzudecken, kann über diese Funktion
@@ -117,19 +132,61 @@ Die Entwicklung des Genauigkeits-Maßs kann grafisch dargestellt werden.
 ```{r}
 ggplot(accuracies_df, aes(nbagg, accuracy)) + geom_point() + geom_line() + theme_classic() + 
   labs(title = "Genauigkeitsmaß nach Anzahl der Bootstrap-Replikationen", caption = "Verwendung 20 diskreter Werte") + 
-  xlab("Anzahl der aggregierten Bäume") + ylab("Genauigkeit") + scale_y_continuous(limits = c(0.8, 0.86)) + scale_x_continuous(limits = c(0, 500))
+  xlab("Anzahl der aggregierten Bäume") + ylab("Genauigkeit") + scale_y_continuous(limits = c(0.8, 0.87)) + scale_x_continuous(limits = c(0, 500))
 ```
+
+Für einen Aggregationswert von 26 hat das Modell die höchste Genauigkeit für den Test-Datensatz mit 86.1%. 
 
 ## Boosting
 
 ```{r}
-boost_model <- gbm(Attrition~., distribution = "gaussian", data = train, n.trees = 1000, shrinkage = 0.1, cv.folds = 10, n.minobsinnode = 10)
-predicted <- predict(boost_model, newdata = test, n.trees = 1000) 
-predicted <- ifelse(predicted > 0.5, 1, 0)
-actual <- test$Attrition
-
+boost_model <- gbm(Attrition~., distribution = "multinomial", data = train, n.trees = 500, shrinkage = 0.002, n.minobsinnode = 10, cv.folds = 10)
+predicted <- predict.gbm(boost_model, newdata = test, n.trees = 500, type = "response") 
+predicted <- predicted[,-1,1]
+predicted <- ifelse(predicted > 0.5, 1,0)
+accuracy <- Metrics::accuracy(actual, predicted)
+accuracy
 ```
 
+Die Vorhersagegenauigkeit des besten Modells beträgt etwa 83%. 
 
 ## Random Forest
 
+```{r}
+train2 <- train %>%
+  mutate(Attrition = as.factor(Attrition))
+grid <- expand.grid(mtry = seq(1,100, 2))
+control <- trainControl(method="cv", number = 10, allowParallel = TRUE)
+ranger_model <- train(Attrition ~., data = train2, method = "ranger", importance = "impurity")
+var_imp <- varImp(ranger_model, scale = FALSE)$importance
+var_imp <- rownames_to_column(var_imp, "Variable")
+var_imp$Variable <- factor(var_imp$Variable, levels = var_imp$Variable[order(var_imp$Overall)])
+var_imp <- var_imp %>%
+  filter(Overall > 8)
+```
+
+```{r}
+ggplot(var_imp, aes(Variable, Overall, fill = Overall)) + geom_col(aes(fill = Overall)) + coord_flip() + theme_classic() + labs(title = "Variableneinfluss im Random Forest", subtitle = "Anmerkung: Cut-Off bei 8%") + geom_text(aes(label=round(Overall, digits = 2)), nudge_y =1, col = "black") + scale_fill_gradient2(low="#e7eff6", high="#63ace5")
+```
+
+Die Entwicklung der Vorhersagegenauigkeit kann auch bei Klassifikationsaufgaben anhand des Parameters »Mtry« visualisiert werden. 
+
+```{r}
+grid <- expand.grid(mtry = seq(1,29, 1), min.node.size = 5, splitrule = "gini")
+control <- trainControl(method="cv", number = 10)
+ranger_model <- train(Attrition ~., data = train2, method = "ranger", importance = "impurity", tuneGrid = grid, trControl = control)
+
+ggplot(ranger_model) + geom_point(col = "#7fa9c1") + geom_line(col = "#7fa9c1") + theme_classic() + xlab("Anzahl von Mtry") + scale_x_continuous(breaks = c(1,5,10,15,20,25,30))
+
+```
+
+Die beste Performance ergibt sich für mtry = 26. 
+
+```{r}
+ranger_model_best <- ranger(Attrition~., data = train, mtry = 26)
+ranger_preds <- predict(ranger_model_best, test)
+predictions <- customRound(ranger_preds$predictions)
+Metrics::accuracy(actual, predictions)
+```
+
+Es ergibt sich eine Genauigkeit von ca. 84%. 
