@@ -102,7 +102,7 @@ registerDoParallel(cl) # Aktivierung des Parallel-Computing-Backends
 
 # Parallele Erstellung der Entscheidungsbäume 
 predictions <- foreach(
-  icount(500), 
+  icount(1000), 
   .packages = "rpart", 
   .combine = cbind
    ) %dopar% {
@@ -118,8 +118,9 @@ predictions <- foreach(
       ) 
     
     predict(bagged_tree, newdata = validation_bagg)
+    on.exit(stopCluster(cl))
    }
-# stopCluster(cl)
+registerDoSEQ() 
 
 predictions <- as_tibble(predictions)
 
@@ -136,11 +137,13 @@ tree_prep <- predictions_df2 %>%
   group_by(instance) %>%
   mutate(avg_prediction = cummean(predicted)) %>%
   group_by(nr_tree) %>%
-  summarize(RMSE = rmse(actual, avg_prediction))
-  
+  summarize(RMSE = rmse(actual, avg_prediction)) %>%
+  arrange(RMSE)
+
+best_bagg <- tree_prep$RMSE[1]
 ```
 
-Die Evaluation der Anzahl der verwendeten Bäume lässt sich gut grafisch veranschaulichen. 
+Der niedrigste Wert für den RMSE wird in der Dekade um 270 aggregierte Bäume erreicht. Dann liegt der Fehler bei 433. Die Evaluation der Anzahl der verwendeten Bäume lässt sich gut grafisch veranschaulichen. 
 
 ```{r}
 ggplot(tree_prep, aes(nr_tree, RMSE)) + geom_line(col = "#7fa9c1", size = 1) + theme_classic() + labs(title = "RMSE-Maß für Bootstrapping") + xlab("Anzahl der Bootstrap-Replikationen") + ylab("Cross-Validation RMSE")
@@ -151,12 +154,12 @@ ggplot(tree_prep, aes(nr_tree, RMSE)) + geom_line(col = "#7fa9c1", size = 1) + t
 Anders als der »Bagging«-Algorithmus versucht der »Boosting«-Algorithmus *sequentiell* aus schwachen Lernen stärkere zu erzeugen. Damit fokussiert er deutlich stärker als die Bagging-Methode auf falsch klassifizierten Beobachtungen bzw. solche Beobachtungen, die ein großes Residuum auf Basis des vorherigen Modells erzeugen. 
 
 ```{r}
-boost_model <- gbm(ViolentCrimesPerPop~., distribution = "gaussian", data = train, n.trees = 2000, shrinkage = 0.1, cv.folds = 10)
+boost_model <- gbm(ViolentCrimesPerPop~., distribution = "gaussian", data = train, n.trees = 2000, shrinkage = 0.01, cv.folds = 10)
 best <- which.min(boost_model$cv.error)
 sqrt(boost_model$cv.error[best])
 ```
 
-Das beste Modell erreicht einen RMSE-Wert von etwa 388. 
+Das beste Modell erreicht einen RMSE-Wert von etwa 391. 
 
 ## Random Forests
 
@@ -202,5 +205,5 @@ rmse(actual, predicted)
 Der RMSE als Funktion von mtry lässt sich gut veranschaulichen. 
 
 ```{r}
-ggplot(cv_select, aes(x = mtry, y = mean.rmse)) + geom_line(col = "#7fa9c1", size = 1) + geom_point(col = "#7fa9c1", size = 3) + theme_classic() + labs(title = "Random Forest RMSE", subtitle = "Auf Basis 15 diskreter Werte für Mtry") + xlab("Mtry") + ylab("Cross-validated RMSE") + scale_x_continuous(breaks = seq(1, 30, 2)) 
+ggplot(cv_select, aes(x = mtry, y = mean.rmse)) + geom_line(col = "#7fa9c1", size = 1) + geom_point(col = "#7fa9c1", size = 3) + theme_classic() + labs(title = "Random Forest RMSE", subtitle = "Auf Basis 15 diskreter Werte für Mtry") + xlab("Mtry") + ylab("Cross-validated RMSE") + scale_x_continuous(breaks = seq(1, 30, 2))
 ```
