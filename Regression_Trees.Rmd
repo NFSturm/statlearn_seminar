@@ -38,7 +38,8 @@ library(doParallel)
 library(foreach)
 library(tidyr)
 library(stringr)
-library(vip)
+library(caret)
+library(tibble)
 
 set.seed(1997) # Zur Gewährleistung von Replizierbarkeit wird im Hintergrund ein Zufallswert gesetzt
 setwd("/Users/nfsturm/Documents/STATLEARN/forestranger")
@@ -91,7 +92,7 @@ plotcp(tree_crime)
 Die »Bootstrap«-Aggregation ist ein paralleler Prozess, der sich gut nachvollziehen lässt. Die Vorgehensweise besteht darin, zunächst aus dem Training-Datensatz *k*-mal *n* Werte mit Wiederholung zu ziehen und für jeden der *k* »neuen« Datensätze einen Entscheidungsbaum zu erstellen. 
 
 ```{r}
-
+set.seed(1997)
 partition <- initial_split(train)
 training_bagg <- training(partition)
 validation_bagg <- testing(partition)
@@ -118,8 +119,8 @@ predictions <- foreach(
       ) 
     
     predict(bagged_tree, newdata = validation_bagg)
-    on.exit(stopCluster(cl))
    }
+stopCluster(cl)
 registerDoSEQ() 
 
 predictions <- as_tibble(predictions)
@@ -143,10 +144,10 @@ tree_prep <- predictions_df2 %>%
 best_bagg <- tree_prep$RMSE[1]
 ```
 
-Der niedrigste Wert für den RMSE wird in der Dekade um 270 aggregierte Bäume erreicht. Dann liegt der Fehler bei 433. Die Evaluation der Anzahl der verwendeten Bäume lässt sich gut grafisch veranschaulichen. 
+Der niedrigste Wert für den RMSE wird in der Dekade um 270 aggregierte Bäume erreicht. Dann liegt der Fehler bei 413. Die Evaluation der Anzahl der verwendeten Bäume lässt sich gut grafisch veranschaulichen. 
 
 ```{r}
-ggplot(tree_prep, aes(nr_tree, RMSE)) + geom_line(col = "#7fa9c1", size = 1) + theme_classic() + labs(title = "RMSE-Maß für Bootstrapping") + xlab("Anzahl der Bootstrap-Replikationen") + ylab("Cross-Validation RMSE")
+ggplot(tree_prep, aes(nr_tree, RMSE)) + geom_line(col = "#7fa9c1", size = 1) + theme_classic() + labs(title = "RMSE-Maß für Bootstrapping", subtitle = "1000 Iterationen") + xlab("Anzahl der Bootstrap-Replikationen") + ylab("Validierungs-RMSE")
 ```
 
 ## Boosting
@@ -154,19 +155,32 @@ ggplot(tree_prep, aes(nr_tree, RMSE)) + geom_line(col = "#7fa9c1", size = 1) + t
 Anders als der »Bagging«-Algorithmus versucht der »Boosting«-Algorithmus *sequentiell* aus schwachen Lernen stärkere zu erzeugen. Damit fokussiert er deutlich stärker als die Bagging-Methode auf falsch klassifizierten Beobachtungen bzw. solche Beobachtungen, die ein großes Residuum auf Basis des vorherigen Modells erzeugen. 
 
 ```{r}
+set.seed(1997)
 boost_model <- gbm(ViolentCrimesPerPop~., distribution = "gaussian", data = train, n.trees = 2000, shrinkage = 0.01, cv.folds = 10)
 best <- which.min(boost_model$cv.error)
 sqrt(boost_model$cv.error[best])
 ```
 
-Das beste Modell erreicht einen RMSE-Wert von etwa 391. 
+Das beste Modell für eine Lernrate von 0.01 und der Aggregation von 2000 Bäumen erreicht einen kreuvalidierten RMSE-Wert von etwa 380. Hier lässt sich die Entwicklung des Testfehlers mit Variation der Lernrate visualisieren.
+
+
+```{r}
+set.seed(1997) # ¡Sehr lange Laufzeit der nächsten Zeilen!
+control <- trainControl(method="cv", number = 10)
+boost_grid <- expand.grid(n.trees = c(100, 200, 300, 500, 700, 900),
+ interaction.depth = 5,
+ shrinkage = c(0.0125, 0.025, 0.05, 0.075, 0.1),
+ n.minobsinnode = 5)
+
+boost_model <- train(ViolentCrimesPerPop ~ ., data = train, method = "gbm", distribution = "gaussian",tuneGrid = boost_grid, verbose = FALSE, trControl = control)
+```
 
 ## Random Forests
 
 Zuletzt soll es um Random Forests gehen. Strukturell sind diese der »Bagging«-Methode sehr ähnlich. Der wesentliche Unterschied liegt darin, dass Random Forests einen Versuch darstellen, die einzelnen Entscheidungsbäume zu »dekorrelieren«. Dies weist auf ein Problem der Bagging Methode hin. Da bei jedem Split $m = p$ Variablen berücksichtigt werden, ist es möglich, dass die »stärkste« Variable wiederholt auftaucht und die Bäume trotz hoher Zahl sich ähneln. Bei Random Forests wird nur ein zufällig ausgewählte Untermenge der Menge an Variablen berücksichtigt. 
 
 ```{r}
-
+set.seed(1997)
 cv_split <- vfold_cv(train, v = 10)
 
 cv_data <- cv_split %>%
@@ -195,6 +209,7 @@ cv_select
 Für mtry = 7 erreicht der Random Forest den geringsten Kreuzvalidierungsfehler von 373. 
 
 ```{r}
+set.seed(1997)
 ranger_model <- ranger(ViolentCrimesPerPop~., data = train, mtry = 7, importance = "impurity")
 actual <- test$ViolentCrimesPerPop
 predicted <- predict(ranger_model, test)
@@ -202,8 +217,26 @@ predicted <- predicted$predictions
 rmse(actual, predicted)
 ```
 
-Der RMSE als Funktion von mtry lässt sich gut veranschaulichen. 
+Das oben konstruierte Random-Forest-Modell erreicht für den Test-Datensatz einen Fehler von 334. Zusätzlich lässt sich der RMSE als Funktion von mtry gut veranschaulichen. 
 
 ```{r}
-ggplot(cv_select, aes(x = mtry, y = mean.rmse)) + geom_line(col = "#7fa9c1", size = 1) + geom_point(col = "#7fa9c1", size = 3) + theme_classic() + labs(title = "Random Forest RMSE", subtitle = "Auf Basis 15 diskreter Werte für Mtry") + xlab("Mtry") + ylab("Cross-validated RMSE") + scale_x_continuous(breaks = seq(1, 30, 2))
+ggplot(cv_select, aes(x = mtry, y = mean.rmse)) + geom_line(col = "#7fa9c1", size = 1) + geom_point(col = "#7fa9c1", size = 3) + theme_classic() + labs(title = "Random Forest RMSE", subtitle = "Auf Basis 30 diskreter Werte für Mtry") + xlab("Mtry") + ylab("Cross-validated RMSE") + scale_x_continuous(breaks = seq(1, 30, 2))
 ```
+
+Weiterhin lässt sich ebenso die Variablen-Wichtigkeit darstellen.
+
+```{r}
+set.seed(1997)
+
+grid <- expand.grid(mtry = seq(1,100, 2))
+control <- trainControl(method="cv", number = 10)
+ranger_model <- train(ViolentCrimesPerPop ~., data = train, method = "ranger", importance = "impurity")
+var_imp <- varImp(ranger_model, scale = FALSE)$importance
+var_imp <- rownames_to_column(var_imp, "Variable")
+var_imp$Variable <- factor(var_imp$Variable, levels = var_imp$Variable[order(var_imp$Overall)])
+var_imp <- var_imp %>%
+  filter(Overall > 6000000)
+
+ggplot(var_imp, aes(Variable, Overall, fill = Overall)) + geom_col(aes(fill = Overall)) + coord_flip() + theme_classic() + labs(title = "Variableneinfluss im Random Forest", subtitle = "Anmerkung: Cut-Off bei 4,000,000") + geom_text(aes(label=round(Overall, digits = 0)), hjust =1.2, col = "black") + scale_fill_gradient2(low="#e7eff6", high="#63ace5")
+```
+

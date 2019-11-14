@@ -3,9 +3,9 @@ title: "Classification Trees"
 author: "Niclas Frederic Sturm"
 date: "3-11-2019"
 output:
-  pdf_document: default
   html_document:
     theme: yeti
+  pdf_document: default
 ---
 
 <style>
@@ -130,7 +130,7 @@ bound_df <- bound_df %>%
   mutate(test_predicted = map(test_predicted, ~customRound(.x))) %>%
   mutate(test_accuracy = map2_dbl(test_actual, test_predicted, ~accuracy(actual = .x, predicted = .y)))
 
-nbagg_tbl <- enframe(nbagg_list, value = "nbagg", name = NULL)
+nbagg_tbl <- enframe(nbagg_seq, value = "nbagg", name = NULL)
 accuracies_tbl <- enframe(bound_df$test_accuracy, value = "accuracy", name = NULL)
 accuracies_df <- bind_cols(nbagg_tbl, accuracies_tbl)
 ```
@@ -157,7 +157,20 @@ accuracy <- Metrics::accuracy(actual, predicted)
 accuracy
 ```
 
-Die Vorhersagegenauigkeit des besten Modells beträgt etwa 83%. 
+Die Vorhersagegenauigkeit des besten Modells für eine Lernrate von 0.002 beträgt etwa 83%. Es kann aber auch eine Rastersuche vorgenommen werden, um größeren Einfluss auf das Modell zu erhalten.
+
+```{r}
+set.seed(1997) # ¡Sehr lange Laufzeit der nächsten Zeilen!
+boost_grid <- expand.grid(n.trees = c(100, 200, 300, 500, 700, 900),
+ interaction.depth = 5,
+ shrinkage = c(0.0125, 0.025, 0.05, 0,075, 0.1),
+ n.minobsinnode = 5)
+
+boost_model <- train(Attrition ~ ., data = train2, method = "gbm", distribution = "adaboost",tuneGrid = boost_grid, verbose = FALSE)
+```
+
+
+
 
 ## Random Forest
 
