@@ -1,7 +1,7 @@
 ---
 title: "Classification Trees"
 author: "Niclas Frederic Sturm"
-date: "3-11-2019"
+date: "19-11-2019"
 output:
   html_document:
     theme: yeti
@@ -120,8 +120,6 @@ customRound <- function(x, threshold = 0.5) {
   rounded <- ifelse(x > threshold, 1, 0)
   return(rounded)
 } 
-"Um die Unsicherheit der Schätzung abzudecken, kann über diese Funktion
-ein Grenzwert gewählt werden, ab dem eine binäre Schätzung vorgenommen wird."
 
 bound_df <- bind_cols(eval_df, test_nested)
 bound_df <- bound_df %>%
@@ -139,11 +137,11 @@ Die Entwicklung des Genauigkeits-Maßs kann grafisch dargestellt werden.
 
 ```{r}
 ggplot(accuracies_df, aes(nbagg, accuracy)) + geom_point() + geom_line() + theme_classic() + 
-  labs(title = "Genauigkeitsmaß nach Anzahl der Bootstrap-Replikationen", caption = "Verwendung 20 diskreter Werte") + 
+  labs(title = "Genauigkeitsmaß nach Anzahl der Bootstrap-Replikationen", caption = "Verwendung 20 diskreter Werte für nbagg") + 
   xlab("Anzahl der aggregierten Bäume") + ylab("Genauigkeit") + scale_y_continuous(limits = c(0.8, 0.87)) + scale_x_continuous(limits = c(0, 500))
 ```
 
-Für einen Aggregationswert von 26 hat das Modell die höchste Genauigkeit für den Test-Datensatz mit 85.3%. 
+Für einen Aggregationswert von 426 hat das Modell die höchste Genauigkeit für den Test-Datensatz mit 85.3%. 
 
 ## Boosting
 

@@ -1,7 +1,7 @@
 ---
 title: "Regression Trees"
 author: "Niclas Frederic Sturm"
-date: "22-10-2019"
+date: "19-11-2019"
 output:
   html_document:
     theme: yeti
@@ -89,7 +89,7 @@ plotcp(tree_crime)
 
 ## Bootstrap aggregating
 
-Die »Bootstrap«-Aggregation ist ein paralleler Prozess, der sich gut nachvollziehen lässt. Die Vorgehensweise besteht darin, zunächst aus dem Training-Datensatz *k*-mal *n* Werte mit Wiederholung zu ziehen und für jeden der *k* »neuen« Datensätze einen Entscheidungsbaum zu erstellen. 
+Die »Bootstrap«-Aggregation ist ein paralleler Prozess, der sich gut nachvollziehen lässt. Die Vorgehensweise besteht darin, zunächst aus dem Training-Datensatz *k*-mal *n* Werte mit Wiederholung zu ziehen und für jeden der *k* »neuen« Datensätze einen Entscheidungsbaum zu erstellen. Für eine sehr hohe Anzahl von Bäumen kann dieser Prozess computativ parallelisiert werden. 
 
 ```{r}
 set.seed(1997)
@@ -161,8 +161,7 @@ best <- which.min(boost_model$cv.error)
 sqrt(boost_model$cv.error[best])
 ```
 
-Das beste Modell für eine Lernrate von 0.01 und der Aggregation von 2000 Bäumen erreicht einen kreuvalidierten RMSE-Wert von etwa 380. Hier lässt sich die Entwicklung des Testfehlers mit Variation der Lernrate visualisieren.
-
+Das beste Modell für eine Lernrate von 0.01 und der Aggregation von 2000 Bäumen erreicht einen kreuvalidierten RMSE-Wert von etwa 380. Mithilfe von »Caret« lassen sich die Feinheiten des Boosting-Prozesses justieren. 
 
 ```{r}
 set.seed(1997) # ¡Sehr lange Laufzeit der nächsten Zeilen!
@@ -206,7 +205,7 @@ cv_select <- cv_tune %>%
 cv_select
 ```
 
-Für mtry = 7 erreicht der Random Forest den geringsten Kreuzvalidierungsfehler von 373. 
+Für mtry = 5 erreicht der Random Forest den geringsten Kreuzvalidierungsfehler von 373. 
 
 ```{r}
 set.seed(1997)
@@ -217,13 +216,13 @@ predicted <- predicted$predictions
 rmse(actual, predicted)
 ```
 
-Das oben konstruierte Random-Forest-Modell erreicht für den Test-Datensatz einen Fehler von 334. Zusätzlich lässt sich der RMSE als Funktion von mtry gut veranschaulichen. 
+Zusätzlich lässt sich der RMSE abhängig von mtry gut veranschaulichen. 
 
 ```{r}
 ggplot(cv_select, aes(x = mtry, y = mean.rmse)) + geom_line(col = "#7fa9c1", size = 1) + geom_point(col = "#7fa9c1", size = 3) + theme_classic() + labs(title = "Random Forest RMSE", subtitle = "Auf Basis 30 diskreter Werte für Mtry") + xlab("Mtry") + ylab("Cross-validated RMSE") + scale_x_continuous(breaks = seq(1, 30, 2))
 ```
 
-Weiterhin lässt sich ebenso die Variablen-Wichtigkeit darstellen.
+Weiterhin lässt sich ebenso die Variablen-Wichtigkeit darstellen. Abhängig von der Skalierung der Variablen kann die Reduktion »Impurity«-Maßes erhebliche Größe errreichen. 
 
 ```{r}
 set.seed(1997)
