@@ -7,3 +7,5 @@ https://www.kaggle.com/kkanda/communities%20and%20crime%20unnormalized%20data%20
 
 Employee Attrition:
 https://www.kaggle.com/pavansubhasht/ibm-hr-analytics-attrition-dataset
+
+Note: Code comments are written in German.
